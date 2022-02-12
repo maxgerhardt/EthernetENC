@@ -25,6 +25,7 @@
 #ifndef Enc28J60Network_H_
 #define Enc28J60Network_H_
 
+#include <SPI.h>
 #include "mempool.h"
 
 #define UIP_RECEIVEBUFFERHANDLE 0xff
@@ -52,6 +53,9 @@ private:
   static uint8_t bank;
 
   static struct memblock receivePkt;
+  static int8_t sck; 
+  static int8_t miso; 
+  static int8_t mosi;
 
   static uint8_t readOp(uint8_t op, uint8_t address);
   static void writeOp(uint8_t op, uint8_t address, uint8_t data);
@@ -73,12 +77,20 @@ private:
 
 public:
 
+  static SPIClass *pSPI;
+
   static uint8_t getrev(void);
   static void powerOn();
   static void powerOff();
   static bool linkStatus();
 
   static void setCsPin(uint8_t _csPin) {csPin = _csPin;}
+  static void setSPI(SPIClass* _spi, int8_t _sck, int8_t _miso, int8_t _mosi) { 
+    pSPI = _spi; 
+    sck = _sck;
+    miso = _miso;
+    mosi = _mosi;
+  }
   static void initSPI();
   static bool init(uint8_t* macaddr);
   static memhandle receivePacket();

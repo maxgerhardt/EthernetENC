@@ -42,6 +42,10 @@ bool Enc28J60Network::spiInitialized=false;
 uint8_t Enc28J60Network::csPin=SS;
 uint16_t Enc28J60Network::nextPacketPtr;
 uint8_t Enc28J60Network::bank=0xff;
+SPIClass *Enc28J60Network::pSPI = &SPI;
+int8_t Enc28J60Network::sck; 
+int8_t Enc28J60Network::miso; 
+int8_t Enc28J60Network::mosi;
 
 struct memblock Enc28J60Network::receivePkt;
 
@@ -51,7 +55,7 @@ void Enc28J60Network::initSPI()
     return;
   pinMode(csPin, OUTPUT);
   CSPASSIVE;
-  SPI.begin();
+  pSPI->begin(sck, miso, mosi);
   spiInitialized = true;
 }
 
@@ -62,7 +66,7 @@ bool Enc28J60Network::init(uint8_t* macaddr)
 
   initSPI();
 
-  SPI.beginTransaction(SPI_ETHERNET_SETTINGS);
+  pSPI->beginTransaction(SPI_ETHERNET_SETTINGS);
 
   // perform system reset
   writeOp(ENC28J60_SOFT_RESET, 0, ENC28J60_SOFT_RESET);
@@ -133,7 +137,7 @@ bool Enc28J60Network::init(uint8_t* macaddr)
   //Configure leds
   phyWrite(PHLCON,0x476);
 
-  SPI.endTransaction();
+  pSPI->endTransaction();
 
   return getrev();
 }
@@ -144,7 +148,7 @@ Enc28J60Network::receivePacket()
   uint8_t rxstat;
   uint16_t len;
 
-  SPI.beginTransaction(SPI_ETHERNET_SETTINGS);
+  pSPI->beginTransaction(SPI_ETHERNET_SETTINGS);
 
   // check if a packet has been received and buffered
   //if( !(readReg(EIR) & EIR_PKTIF) ){
@@ -187,14 +191,14 @@ Enc28J60Network::receivePacket()
         {
           receivePkt.begin = readPtr;
           receivePkt.size = len;
-          SPI.endTransaction();
+          pSPI->endTransaction();
           return UIP_RECEIVEBUFFERHANDLE;
         }
       // Move the RX read pointer to the start of the next received packet
       // This frees the memory we just read out
       setERXRDPT();
     }
-  SPI.endTransaction();
+  pSPI->endTransaction();
   return (NOBLOCK);
 }
 
@@ -217,7 +221,7 @@ Enc28J60Network::sendPacket(memhandle handle)
   uint16_t start = packet->begin; // includes the UIP_SENDBUFFER_OFFSET for control byte
   uint16_t end = start + packet->size - 1 - UIP_SENDBUFFER_PADDING; // end = start + size - 1 and padding for TSV is no included
 
-  SPI.beginTransaction(SPI_ETHERNET_SETTINGS);
+  pSPI->beginTransaction(SPI_ETHERNET_SETTINGS);
 
   // write control-byte (if not 0 anyway)
     writeByte(start, 0);
@@ -269,7 +273,7 @@ Enc28J60Network::sendPacket(memhandle handle)
       break; // other fail, not the Errata 13 situation
   }
 
-  SPI.endTransaction();
+  pSPI->endTransaction();
   return success;
 }
 
@@ -289,10 +293,10 @@ Enc28J60Network::setReadPtr(memhandle handle, memaddress position, uint16_t len)
 uint16_t
 Enc28J60Network::readPacket(memhandle handle, memaddress position, uint8_t* buffer, uint16_t len)
 {
-  SPI.beginTransaction(SPI_ETHERNET_SETTINGS);
+  pSPI->beginTransaction(SPI_ETHERNET_SETTINGS);
   len = setReadPtr(handle, position, len);
   readBuffer(len, buffer);
-  SPI.endTransaction();
+  pSPI->endTransaction();
   return len;
 }
 
@@ -308,13 +312,13 @@ Enc28J60Network::writePacket(memhandle handle, memaddress position, uint8_t* buf
   if (len == 0)
     return 0;
 
-  SPI.beginTransaction(SPI_ETHERNET_SETTINGS);
+  pSPI->beginTransaction(SPI_ETHERNET_SETTINGS);
 
   writeRegPair(EWRPTL, start);
 
   writeBuffer(len, buffer);
 
-  SPI.endTransaction();
+  pSPI->endTransaction();
   return len;
 }
 
@@ -324,9 +328,9 @@ uint8_t Enc28J60Network::readByte(uint16_t addr)
 
   CSACTIVE;
   // issue read command
-  SPI.transfer(ENC28J60_READ_BUF_MEM);
+  pSPI->transfer(ENC28J60_READ_BUF_MEM);
   // read data
-  uint8_t c = SPI.transfer(0x00);
+  uint8_t c = pSPI->transfer(0x00);
   CSPASSIVE;
   return c;
 }
@@ -337,9 +341,9 @@ void Enc28J60Network::writeByte(uint16_t addr, uint8_t data)
 
   CSACTIVE;
   // issue write command
-  SPI.transfer(ENC28J60_WRITE_BUF_MEM);
+  pSPI->transfer(ENC28J60_WRITE_BUF_MEM);
   // write data
-  SPI.transfer(data);
+  pSPI->transfer(data);
   CSPASSIVE;
 }
 
@@ -360,7 +364,7 @@ enc28J60_mempool_block_move_callback(memaddress dest, memaddress src, memaddress
 //Enc28J60Network::memblock_mv_cb(uint16_t dest, uint16_t src, uint16_t len)
 //{
 
-  SPI.beginTransaction(SPI_ETHERNET_SETTINGS);
+  Enc28J60Network::pSPI->beginTransaction(SPI_ETHERNET_SETTINGS);
 
   //as ENC28J60 DMA is unable to copy single bytes:
   if (len == 1)
@@ -406,15 +410,15 @@ enc28J60_mempool_block_move_callback(memaddress dest, memaddress src, memaddress
       // wait until runnig DMA is completed
       while (Enc28J60Network::readOp(ENC28J60_READ_CTRL_REG, ECON1) & ECON1_DMAST);
     }
-  SPI.endTransaction();
+  Enc28J60Network::pSPI->endTransaction();
 }
 
 void
 Enc28J60Network::freePacket()
 {
-    SPI.beginTransaction(SPI_ETHERNET_SETTINGS);
+    pSPI->beginTransaction(SPI_ETHERNET_SETTINGS);
     setERXRDPT();
-    SPI.endTransaction();
+    pSPI->endTransaction();
 }
 
 uint8_t
@@ -422,14 +426,14 @@ Enc28J60Network::readOp(uint8_t op, uint8_t address)
 {
   CSACTIVE;
   // issue read command
-  SPI.transfer(op | (address & ADDR_MASK));
+  pSPI->transfer(op | (address & ADDR_MASK));
   // read data
   if(address & 0x80)
     {
     // do dummy read if needed (for mac and mii, see datasheet page 29)
-    SPI.transfer(0x00);
+    pSPI->transfer(0x00);
     }
-  uint8_t c = SPI.transfer(0x00);
+  uint8_t c = pSPI->transfer(0x00);
   CSPASSIVE;
   return c;
 }
@@ -439,9 +443,9 @@ Enc28J60Network::writeOp(uint8_t op, uint8_t address, uint8_t data)
 {
   CSACTIVE;
   // issue write command
-  SPI.transfer(op | (address & ADDR_MASK));
+  pSPI->transfer(op | (address & ADDR_MASK));
   // write data
-  SPI.transfer(data);
+  pSPI->transfer(data);
   CSPASSIVE;
 }
 
@@ -450,12 +454,12 @@ Enc28J60Network::readBuffer(uint16_t len, uint8_t* data)
 {
   CSACTIVE;
   // issue read command
-  SPI.transfer(ENC28J60_READ_BUF_MEM);
+  pSPI->transfer(ENC28J60_READ_BUF_MEM);
   while(len)
   {
     len--;
     // read data
-    *data = SPI.transfer(0x00);
+    *data = pSPI->transfer(0x00);
     data++;
   }
   //*data='\0';
@@ -467,12 +471,12 @@ Enc28J60Network::writeBuffer(uint16_t len, uint8_t* data)
 {
   CSACTIVE;
   // issue write command
-  SPI.transfer(ENC28J60_WRITE_BUF_MEM);
+  pSPI->transfer(ENC28J60_WRITE_BUF_MEM);
   while(len)
   {
     len--;
     // write data
-    SPI.transfer(*data);
+    pSPI->transfer(*data);
     data++;
   }
   CSPASSIVE;
@@ -557,12 +561,12 @@ uint8_t
 Enc28J60Network::getrev(void)
 {
   initSPI();
-  SPI.beginTransaction(SPI_ETHERNET_SETTINGS);
+  pSPI->beginTransaction(SPI_ETHERNET_SETTINGS);
   uint8_t res = readReg(EREVID);
   if (res == 0xFF) {
     res = 0;
   }
-  SPI.endTransaction();
+  pSPI->endTransaction();
   return res;
 }
 
@@ -570,31 +574,31 @@ uint16_t
 Enc28J60Network::chksum(uint16_t sum, memhandle handle, memaddress pos, uint16_t len)
 {
   uint16_t t;
-  SPI.beginTransaction(SPI_ETHERNET_SETTINGS);
+  pSPI->beginTransaction(SPI_ETHERNET_SETTINGS);
   len = setReadPtr(handle, pos, len)-1;
   CSACTIVE;
   // issue read command
-  SPI.transfer(ENC28J60_READ_BUF_MEM);
+  pSPI->transfer(ENC28J60_READ_BUF_MEM);
   uint16_t i;
   for (i = 0; i < len; i+=2)
   {
     // read data
-    t = SPI.transfer(0x00) << 8;
-    t += SPI.transfer(0x00);
+    t = pSPI->transfer(0x00) << 8;
+    t += pSPI->transfer(0x00);
     sum += t;
     if(sum < t) {
       sum++;            /* carry */
     }
   }
   if(i == len) {
-    t = (SPI.transfer(0x00) << 8) + 0;
+    t = (pSPI->transfer(0x00) << 8) + 0;
     sum += t;
     if(sum < t) {
       sum++;            /* carry */
     }
   }
   CSPASSIVE;
-  SPI.endTransaction();
+  pSPI->endTransaction();
 
   /* Return sum in host byte order. */
   return sum;
@@ -603,31 +607,31 @@ Enc28J60Network::chksum(uint16_t sum, memhandle handle, memaddress pos, uint16_t
 void
 Enc28J60Network::powerOff()
 {
-  SPI.beginTransaction(SPI_ETHERNET_SETTINGS);
+  pSPI->beginTransaction(SPI_ETHERNET_SETTINGS);
   writeOp(ENC28J60_BIT_FIELD_CLR, ECON1, ECON1_RXEN);
   delay(50);
   writeOp(ENC28J60_BIT_FIELD_SET, ECON2, ECON2_VRPS);
   delay(50);
   writeOp(ENC28J60_BIT_FIELD_SET, ECON2, ECON2_PWRSV);
-  SPI.endTransaction();
+  pSPI->endTransaction();
 }
 
 void
 Enc28J60Network::powerOn()
 {
-  SPI.beginTransaction(SPI_ETHERNET_SETTINGS);
+  pSPI->beginTransaction(SPI_ETHERNET_SETTINGS);
   writeOp(ENC28J60_BIT_FIELD_CLR, ECON2, ECON2_PWRSV);
   delay(50);
   writeOp(ENC28J60_BIT_FIELD_SET, ECON1, ECON1_RXEN);
   delay(50);
-  SPI.endTransaction();
+  pSPI->endTransaction();
 }
 
 bool
 Enc28J60Network::linkStatus()
 {
-  SPI.beginTransaction(SPI_ETHERNET_SETTINGS);
+  pSPI->beginTransaction(SPI_ETHERNET_SETTINGS);
   bool res = (phyRead(PHSTAT2) & 0x0400) > 0;
-  SPI.endTransaction();
+  pSPI->endTransaction();
   return res;
 }

@@ -77,7 +77,7 @@ class UIPEthernetClass
 public:
   UIPEthernetClass();
 
-  void init(uint8_t csPin);
+  void init(uint8_t csPin, SPIClass* pSPI = &SPI, int8_t sck = -1, int8_t miso = -1, int8_t mosi = -1);
 
   int begin(const uint8_t* mac, unsigned long timeout = 60000, unsigned long responseTimeout = 4000);
   void begin(const uint8_t* mac, IPAddress ip);

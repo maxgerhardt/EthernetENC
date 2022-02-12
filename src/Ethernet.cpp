@@ -18,6 +18,7 @@
   */
 
 #include <Arduino.h>
+#include <SPI.h>
 #include "Ethernet.h"
 #include "utility/Enc28J60Network.h"
 
@@ -48,8 +49,9 @@ UIPEthernetClass::UIPEthernetClass()
 {
 }
 
-void UIPEthernetClass::init(uint8_t csPin)
+void UIPEthernetClass::init(uint8_t csPin, SPIClass* pSPI, int8_t sck, int8_t miso, int8_t mosi)
 {
+  Enc28J60Network::setSPI(pSPI, sck, miso, mosi);
   Enc28J60Network::setCsPin(csPin);
 }
 
