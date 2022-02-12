@@ -110,7 +110,7 @@ private:
 
   static unsigned long periodic_timer;
 
-  static void init(const uint8_t* mac);
+  static bool init(const uint8_t* mac);
   static void configure(IPAddress ip, IPAddress dns, IPAddress gateway, IPAddress subnet);
 
   static void tick();

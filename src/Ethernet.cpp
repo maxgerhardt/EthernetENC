@@ -63,7 +63,13 @@ UIPEthernetClass::begin(const uint8_t* mac, unsigned long timeout, unsigned long
   _dhcp = &s_dhcp;
 
   // Initialise the basic info
-  init(mac);
+  bool ok = init(mac);
+  if(!ok)
+    return 0;
+
+  // no hardware connected? return early
+  if (!Enc28J60Network::getrev())
+    return 0;
 
   // Now try to get our config info from a DHCP server
   int ret = _dhcp->beginWithDHCP((uint8_t*)mac, timeout, responseTimeout);
@@ -307,14 +313,17 @@ sendandfree:
   return success;
 }
 
-void UIPEthernetClass::init(const uint8_t* mac) {
+bool UIPEthernetClass::init(const uint8_t* mac) {
   periodic_timer = millis() + UIP_PERIODIC_TIMER;
 
   initialized = Enc28J60Network::init((uint8_t*)mac);
+  if(!initialized)
+    return false;
   uip_seteth_addr(mac);
 
   uip_init();
   uip_arp_init();
+  return true;
 }
 
 void UIPEthernetClass::configure(IPAddress ip, IPAddress dns, IPAddress gateway, IPAddress subnet) {
